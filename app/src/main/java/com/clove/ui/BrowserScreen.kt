@@ -41,7 +41,6 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.zIndex
 import com.clove.browser.BrowserViewModel
 import com.clove.browser.web.applySafariSettings
-import com.clove.browser.web.captureThumbnail
 import com.clove.browser.web.createBrowserWebView
 import com.clove.browser.web.disableDistractionControl
 import com.clove.browser.web.enableDistractionControl
@@ -119,10 +118,6 @@ fun BrowserScreen(viewModel: BrowserViewModel) {
 
     fun activeWebView(): WebView? = viewModel.currentTabId?.let { webViews[it] }
 
-    fun captureCurrentThumbnail() {
-        activeWebView()?.captureThumbnail()?.let { bmp -> tab?.thumbnail = bmp }
-    }
-
     fun shareCurrent() {
         val url = tab?.url ?: return
         if (url.isBlank()) return
@@ -152,40 +147,43 @@ fun BrowserScreen(viewModel: BrowserViewModel) {
         }
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(palette.pageBackground),
-    ) {
-        // ---------- Page content (expanded fully behind status bar, iOS Safari style) ----------
-        Box(modifier = Modifier.fillMaxSize()) {
-            if (tab != null && tab.hasContent) {
-                key(tab.id) {
-                    AndroidView(
-                        factory = {
-                            val wv = webViews.getOrPut(tab.id) {
-                                createBrowserWebView(context, tab, viewModel, onScroll)
-                            }
-                            (wv.parent as? ViewGroup)?.removeView(wv)
-                            wv
-                        },
-                        modifier = Modifier.fillMaxSize(),
-                        update = { wv ->
-                            val pending = tab.pendingUrl
-                            if (pending != null) {
-                                wv.loadUrl(pending)
-                                tab.pendingUrl = null
-                            }
-                        },
+    CompositionLocalProvider(LocalGlassBackdrop provides glassBackdropState) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(palette.pageBackground),
+        ) {
+            // ---------- Page content (safe distance from status bar, edge-to-edge background) ----------
+            Box(modifier = Modifier.fillMaxSize()) {
+                if (tab != null && tab.hasContent) {
+                    key(tab.id) {
+                        AndroidView(
+                            factory = {
+                                val wv = webViews.getOrPut(tab.id) {
+                                    createBrowserWebView(context, tab, viewModel, onScroll)
+                                }
+                                (wv.parent as? ViewGroup)?.removeView(wv)
+                                wv
+                            },
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .statusBarsPadding(),
+                            update = { wv ->
+                                val pending = tab.pendingUrl
+                                if (pending != null) {
+                                    wv.loadUrl(pending)
+                                    tab.pendingUrl = null
+                                }
+                            },
+                        )
+                    }
+                } else {
+                    StartPage(
+                        isPrivate = viewModel.isPrivateMode,
+                        onOpen = { url -> tab?.let { viewModel.loadInTab(it, url) } },
                     )
                 }
-            } else {
-                StartPage(
-                    isPrivate = viewModel.isPrivateMode,
-                    onOpen = { url -> tab?.let { viewModel.loadInTab(it, url) } },
-                )
             }
-        }
 
         // ---------- Subtle Top Status Bar Glass Scrim ----------
         val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
@@ -231,55 +229,53 @@ fun BrowserScreen(viewModel: BrowserViewModel) {
                 .navigationBarsPadding()
                 .padding(horizontal = 10.dp, vertical = 8.dp)
 
-            CompositionLocalProvider(LocalGlassBackdrop provides glassBackdropState) {
-                when {
-                    tab?.findActive == true -> {
-                        FindOnPageBar(
-                            query = tab.findQuery,
-                            currentMatch = tab.findCurrentMatch,
-                            totalMatches = tab.findTotalMatches,
-                            onQueryChange = { q ->
-                                tab.findQuery = q
-                                activeWebView()?.findAllAsync(q)
-                            },
-                            onNext = { activeWebView()?.findNext(true) },
-                            onPrevious = { activeWebView()?.findNext(false) },
-                            onClose = {
-                                tab.findActive = false
-                                tab.findQuery = ""
-                                activeWebView()?.clearMatches()
-                            },
-                            modifier = toolbarModifier,
-                        )
-                    }
-                    tab?.isDistractionControlActive == true -> {
-                        DistractionBanner(
-                            onDone = {
-                                tab.isDistractionControlActive = false
-                                activeWebView()?.disableDistractionControl()
-                            },
-                            modifier = toolbarModifier,
-                        )
-                    }
-                    else -> {
-                        BrowserToolbar(
-                            tab = tab,
-                            collapseFraction = collapseFraction,
-                            onBack = { activeWebView()?.let { if (it.canGoBack()) it.goBack() } },
-                            onForward = { activeWebView()?.let { if (it.canGoForward()) it.goForward() } },
-                            onShare = { shareCurrent() },
-                            onReloadOrStop = {
-                                val wv = activeWebView()
-                                if (tab?.isLoading == true) wv?.stopLoading() else wv?.reload()
-                            },
-                            onAddressTap = { editingAddress = true },
-                            onMore = { showMore = true },
-                            onBookmarks = { libraryTab = LibraryTab.BOOKMARKS; overlay = Overlay.LIBRARY },
-                            onTabs = { captureCurrentThumbnail(); overlay = Overlay.TABS },
-                            onFormatMenu = { showPageFormat = true },
-                            modifier = toolbarModifier,
-                        )
-                    }
+            when {
+                tab?.findActive == true -> {
+                    FindOnPageBar(
+                        query = tab.findQuery,
+                        currentMatch = tab.findCurrentMatch,
+                        totalMatches = tab.findTotalMatches,
+                        onQueryChange = { q ->
+                            tab.findQuery = q
+                            activeWebView()?.findAllAsync(q)
+                        },
+                        onNext = { activeWebView()?.findNext(true) },
+                        onPrevious = { activeWebView()?.findNext(false) },
+                        onClose = {
+                            tab.findActive = false
+                            tab.findQuery = ""
+                            activeWebView()?.clearMatches()
+                        },
+                        modifier = toolbarModifier,
+                    )
+                }
+                tab?.isDistractionControlActive == true -> {
+                    DistractionBanner(
+                        onDone = {
+                            tab.isDistractionControlActive = false
+                            activeWebView()?.disableDistractionControl()
+                        },
+                        modifier = toolbarModifier,
+                    )
+                }
+                else -> {
+                    BrowserToolbar(
+                        tab = tab,
+                        collapseFraction = collapseFraction,
+                        onBack = { activeWebView()?.let { if (it.canGoBack()) it.goBack() } },
+                        onForward = { activeWebView()?.let { if (it.canGoForward()) it.goForward() } },
+                        onShare = { shareCurrent() },
+                        onReloadOrStop = {
+                            val wv = activeWebView()
+                            if (tab?.isLoading == true) wv?.stopLoading() else wv?.reload()
+                        },
+                        onAddressTap = { editingAddress = true },
+                        onMore = { showMore = true },
+                        onBookmarks = { libraryTab = LibraryTab.BOOKMARKS; overlay = Overlay.LIBRARY },
+                        onTabs = { overlay = Overlay.TABS },
+                        onFormatMenu = { showPageFormat = true },
+                        modifier = toolbarModifier,
+                    )
                 }
             }
         }
@@ -349,7 +345,7 @@ fun BrowserScreen(viewModel: BrowserViewModel) {
             isBookmarked = tab?.let { viewModel.isBookmarked(it.url) } == true,
             onShare = { showMore = false; shareCurrent() },
             onBookmarks = { showMore = false; libraryTab = LibraryTab.BOOKMARKS; overlay = Overlay.LIBRARY },
-            onAllTabs = { showMore = false; captureCurrentThumbnail(); overlay = Overlay.TABS },
+            onAllTabs = { showMore = false; overlay = Overlay.TABS },
             onNewTab = { showMore = false; viewModel.newTab(private = false); editingAddress = true },
             onNewPrivateTab = { showMore = false; viewModel.newTab(private = true); editingAddress = true },
             onAddReadingList = {
@@ -455,4 +451,5 @@ fun BrowserScreen(viewModel: BrowserViewModel) {
             onDismiss = { overlay = Overlay.NONE },
         )
     }
+}
 }

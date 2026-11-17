@@ -232,15 +232,3 @@ fun WebView.disableDistractionControl() {
     """.trimIndent()
     evaluateJavascript(js, null)
 }
-
-/** Renders the WebView's current frame to a bitmap for the tab-switcher thumbnail. */
-fun WebView.captureThumbnail(): Bitmap? {
-    if (width <= 0 || height <= 0) return null
-    return try {
-        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-        draw(Canvas(bitmap))
-        bitmap
-    } catch (e: Exception) {
-        null
-    }
-}

@@ -1,6 +1,5 @@
 package com.clove.ui.screens
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -8,9 +7,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -36,8 +37,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -298,7 +297,7 @@ private fun TabCard(
             }
         }
 
-        // Preview
+        // Preview Box
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -306,33 +305,49 @@ private fun TabCard(
                 .clip(shape)
                 .background(palette.glassElevated)
                 .then(
-                    if (selected) Modifier.border(2.5.dp, palette.accent, shape) else Modifier
+                    if (selected) Modifier.border(2.5.dp, palette.accent, shape)
+                    else Modifier.border(0.75.dp, palette.glassBorder, shape)
                 )
-                .then(clickableCompat(onClick = onSelect)),
+                .then(clickableCompat(onClick = onSelect))
+                .padding(14.dp),
             contentAlignment = Alignment.Center,
         ) {
-            val thumb = tab.thumbnail
-            if (thumb != null) {
-                Image(
-                    bitmap = thumb.asImageBitmap(),
-                    contentDescription = tab.displayTitle,
-                    contentScale = ContentScale.Crop,
-                    alignment = Alignment.TopCenter,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            } else {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(palette.accent.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center,
+                ) {
                     Icon(
                         Lucide.Globe,
                         contentDescription = null,
-                        tint = palette.textSecondary,
-                        modifier = Modifier.size(34.dp),
+                        tint = palette.accent,
+                        modifier = Modifier.size(24.dp),
                     )
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = if (tab.host.isBlank()) "Start Page" else tab.host,
+                    color = palette.textPrimary,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (tab.title.isNotBlank() && tab.title != tab.host) {
                     Text(
-                        text = if (tab.host.isBlank()) "Start Page" else tab.host,
+                        text = tab.title,
                         color = palette.textSecondary,
-                        fontSize = 13.sp,
-                        modifier = Modifier.padding(top = 8.dp),
+                        fontSize = 11.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        modifier = Modifier.padding(top = 4.dp),
                     )
                 }
             }

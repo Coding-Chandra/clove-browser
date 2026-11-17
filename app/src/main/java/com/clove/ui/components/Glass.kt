@@ -1,7 +1,6 @@
 package com.clove.ui.components
 
 import android.graphics.BitmapShader
-import android.graphics.LinearGradient
 import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.RuntimeShader
@@ -9,8 +8,6 @@ import android.graphics.Shader
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
@@ -28,17 +25,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.nativeCanvas
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
@@ -48,7 +47,6 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.clove.ui.theme.LocalSafariPalette
 import org.intellij.lang.annotations.Language
-import kotlin.math.PI
 import kotlin.math.min
 import kotlin.math.roundToInt
 
@@ -96,8 +94,6 @@ uniform float refractionHeight;
 uniform float refractionAmount;
 uniform float depthEffect;
 uniform float chromaticAberration;
-uniform float4 tintColor;
-uniform float tintAlpha;
 
 $RoundedRectSDF
 
@@ -111,116 +107,60 @@ half4 main(float2 coord) {
     float radius = radiusAt(centeredCoord, cornerRadii);
     
     float sd = sdRoundedRect(centeredCoord, halfSize, radius);
-    
-    // Continuous liquid lens curvature from outer bevel to inner core
-    float d = 0.0;
-    if (-sd < refractionHeight) {
-        float normDist = clamp(-sd / max(refractionHeight, 1.0), 0.0, 1.0);
-        d = circleMap(1.0 - normDist) * refractionAmount;
-    } else {
-        float centerDist = length(centeredCoord) / max(length(halfSize), 1.0);
-        d = (1.0 - centerDist) * (refractionAmount * 0.18);
+    if (-sd >= refractionHeight) {
+        return content.eval(coord);
     }
+    sd = min(sd, 0.0);
     
+    float d = circleMap(1.0 - -sd / refractionHeight) * refractionAmount;
     float gradRadius = min(radius * 1.5, min(halfSize.x, halfSize.y));
     float2 grad = normalize(gradSdRoundedRect(centeredCoord, halfSize, gradRadius) + depthEffect * normalize(centeredCoord + 0.0001));
     
     float2 refractedCoord = coord + d * grad;
-    half4 color;
     
     if (chromaticAberration <= 0.0) {
-        color = content.eval(refractedCoord);
-    } else {
-        // High-fidelity RGB prism dispersion around the bevel
-        float dispersionDist = d * chromaticAberration * 0.75;
-        float2 disp = grad * dispersionDist;
-        
-        half4 red = content.eval(refractedCoord + disp);
-        half4 green = content.eval(refractedCoord);
-        half4 blue = content.eval(refractedCoord - disp);
-        
-        color = half4(red.r, green.g, blue.b, (red.a + green.a + blue.a) / 3.0);
+        return content.eval(refractedCoord);
     }
     
-    // Keep 85-90% true transparency, with subtle crystal glass tint
-    color = mix(color, half4(tintColor.rgb, color.a), tintAlpha);
-    return color;
-}
-"""
-
-@Language("AGSL")
-private const val HighlightShaderString = """
-uniform float2 size;
-uniform float4 cornerRadii;
-uniform float4 color;
-uniform float angle;
-uniform float falloff;
-
-$RoundedRectSDF
-
-half4 main(float2 coord) {
-    float2 halfSize = size * 0.5;
-    float2 centeredCoord = coord - halfSize;
-    float radius = radiusAt(centeredCoord, cornerRadii);
+    // High-fidelity chromatic RGB dispersion across the lens rim
+    float dispersionDist = d * chromaticAberration * 0.75;
+    float2 disp = grad * dispersionDist;
     
-    float gradRadius = min(radius * 1.5, min(halfSize.x, halfSize.y));
-    float2 grad = gradSdRoundedRect(centeredCoord, halfSize, gradRadius);
-    float2 normal = float2(cos(angle), sin(angle));
-    float d = dot(grad, normal);
-    float intensity = pow(clamp(d, 0.0, 1.0), falloff);
-    return half4(color) * intensity;
-}
-"""
-
-@Language("AGSL")
-private const val TouchHighlightShaderString = """
-uniform float2 size;
-uniform float4 color;
-uniform float radius;
-uniform float2 position;
-
-half4 main(float2 coord) {
-    float dist = distance(coord, position);
-    float intensity = smoothstep(radius, radius * 0.25, dist);
-    return half4(color) * intensity;
+    half4 red = content.eval(refractedCoord + disp);
+    half4 green = content.eval(refractedCoord);
+    half4 blue = content.eval(refractedCoord - disp);
+    
+    return half4(red.r, green.g, blue.b, (red.a + green.a + blue.a) / 3.0);
 }
 """
 
 /**
- * A true crystal "liquid glass" surface powered by Kyant0/AndroidLiquidGlass AGSL shaders.
- * Evaluates real-time SDF lens refraction, chromatic RGB dispersion, directional specular
- * rim highlights, and live backdrop sampling without opaque layer covers.
+ * A true crystal "liquid glass" surface inspired by Kyant0/AndroidLiquidGlass:
+ * - High optical transparency (genuine see-through, never opaque)
+ * - Continuous SDF rounded-rect physical lens curvature
+ * - High-fidelity chromatic RGB dispersion splitting colors along the curved rim
+ * - 45° specular rim highlight border with dual-angle illumination
+ * - 3D convex glass glaze highlight
+ * - Ambient drop shadow
  */
 @Composable
 fun GlassSurface(
     modifier: Modifier = Modifier,
     shape: Shape = RoundedCornerShape(28.dp),
-    elevation: Dp = 16.dp,
+    elevation: Dp = 14.dp,
     chromaticAberration: Boolean = true,
-    isInteractive: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     val palette = LocalSafariPalette.current
     val backdropState = LocalGlassBackdrop.current
     val density = LocalDensity.current
 
-    val highlightColor = if (palette.isDark) Color.White.copy(alpha = 0.35f) else Color.White.copy(alpha = 0.75f)
-    val tintColor = if (palette.isDark) Color(0xFF14141A) else Color(0xFFFFFFFF)
-    val tintAlpha = if (palette.isDark) 0.18f else 0.10f
-
-    val refractionHeightPx = with(density) { 20.dp.toPx() }
-    val refractionAmountPx = with(density) { 24.dp.toPx() }
+    val refractionHeightPx = with(density) { 18.dp.toPx() }
+    val refractionAmountPx = with(density) { 22.dp.toPx() }
 
     val refractionShader = remember {
         try {
             RuntimeShader(RefractionWithDispersionShaderString)
-        } catch (_: Throwable) {
-            null
-        }
-    }
-    val highlightShader = remember {
-        try {
-            RuntimeShader(HighlightShaderString)
         } catch (_: Throwable) {
             null
         }
@@ -230,7 +170,13 @@ fun GlassSurface(
 
     Box(
         modifier = modifier
-            .shadow(elevation, shape, clip = false, ambientColor = Color.Black.copy(0.20f), spotColor = Color.Black.copy(0.25f))
+            .shadow(
+                elevation = elevation,
+                shape = shape,
+                clip = false,
+                ambientColor = Color.Black.copy(if (palette.isDark) 0.22f else 0.10f),
+                spotColor = Color.Black.copy(if (palette.isDark) 0.28f else 0.14f),
+            )
             .onGloballyPositioned {
                 val p = it.positionInRoot()
                 posInRoot[0] = p.x
@@ -238,91 +184,89 @@ fun GlassSurface(
             }
             .clip(shape)
             .drawBehind {
-                val backdrop = backdropState?.value
                 val w = size.width
                 val h = size.height
+                if (w <= 0f || h <= 0f) return@drawBehind
 
-                if (w > 0f && h > 0f) {
-                    val cornerRadius = when {
-                        shape == CircleShape -> min(w, h) / 2f
-                        shape is CornerBasedShape -> shape.topStart.toPx(size, density).coerceAtMost(min(w, h) / 2f)
-                        else -> min(w, h) / 2f
-                    }
-                    val radii = floatArrayOf(cornerRadius, cornerRadius, cornerRadius, cornerRadius)
+                val cornerRadius = when {
+                    shape == CircleShape -> min(w, h) / 2f
+                    shape is CornerBasedShape -> shape.topStart.toPx(size, density).coerceAtMost(min(w, h) / 2f)
+                    else -> min(w, h) / 2f
+                }
+                val radii = floatArrayOf(cornerRadius, cornerRadius, cornerRadius, cornerRadius)
+                val cRadius = CornerRadius(cornerRadius, cornerRadius)
 
+                // 1. LIVE BACKDROP OPTICAL REFRACTION (Kyant0/AndroidLiquidGlass physical lens)
+                val backdrop = backdropState?.value
+                if (backdrop != null && backdrop.image != null && backdrop.rootWidth > 0 && backdrop.rootHeight > 0) {
                     if (refractionShader != null) {
                         drawIntoCanvas { canvas ->
                             val nativeCanvas = canvas.nativeCanvas
-                            val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+                            val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+                            val bmp = backdrop.image.asAndroidBitmap()
+                            val sx = bmp.width.toFloat() / backdrop.rootWidth
+                            val sy = bmp.height.toFloat() / backdrop.rootHeight
+                            val matrix = Matrix()
+                            matrix.setScale(1f / sx, 1f / sy)
+                            matrix.postTranslate(-posInRoot[0], -posInRoot[1])
+                            val bs = BitmapShader(bmp, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
+                            bs.setLocalMatrix(matrix)
 
-                            val contentShader: Shader = if (backdrop != null && backdrop.image != null && backdrop.rootWidth > 0 && backdrop.rootHeight > 0) {
-                                val bmp = backdrop.image.asAndroidBitmap()
-                                val sx = bmp.width.toFloat() / backdrop.rootWidth
-                                val sy = bmp.height.toFloat() / backdrop.rootHeight
-                                val matrix = Matrix()
-                                matrix.setScale(1f / sx, 1f / sy)
-                                matrix.postTranslate(-posInRoot[0], -posInRoot[1])
-                                val bs = BitmapShader(bmp, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
-                                bs.setLocalMatrix(matrix)
-                                bs
-                            } else {
-                                // Clear crystal frost fallback before first snapshot
-                                LinearGradient(
-                                    0f, 0f, w, h,
-                                    tintColor.copy(alpha = 0.22f).toArgb(),
-                                    tintColor.copy(alpha = 0.08f).toArgb(),
-                                    Shader.TileMode.CLAMP
-                                )
-                            }
-
-                            // 1. Physical Liquid Glass Refraction & Chromatic RGB Dispersion
-                            refractionShader.setInputShader("content", contentShader)
+                            refractionShader.setInputShader("content", bs)
                             refractionShader.setFloatUniform("size", w, h)
                             refractionShader.setFloatUniform("offset", 0f, 0f)
                             refractionShader.setFloatUniform("cornerRadii", radii)
                             refractionShader.setFloatUniform("refractionHeight", refractionHeightPx)
                             refractionShader.setFloatUniform("refractionAmount", -refractionAmountPx)
-                            refractionShader.setFloatUniform("depthEffect", 0.06f)
+                            refractionShader.setFloatUniform("depthEffect", 0.08f)
                             refractionShader.setFloatUniform("chromaticAberration", if (chromaticAberration) 1.5f else 0f)
-                            refractionShader.setFloatUniform(
-                                "tintColor",
-                                tintColor.red,
-                                tintColor.green,
-                                tintColor.blue,
-                                1.0f
-                            )
-                            refractionShader.setFloatUniform("tintAlpha", tintAlpha)
 
                             paint.shader = refractionShader
                             nativeCanvas.drawRoundRect(0f, 0f, w, h, cornerRadius, cornerRadius, paint)
-
-                            // 2. Specular Rim Highlight (Angle: 45° = PI/4)
-                            if (highlightShader != null) {
-                                highlightShader.setFloatUniform("size", w, h)
-                                highlightShader.setFloatUniform("cornerRadii", radii)
-                                highlightShader.setFloatUniform(
-                                    "color",
-                                    highlightColor.red,
-                                    highlightColor.green,
-                                    highlightColor.blue,
-                                    highlightColor.alpha
-                                )
-                                highlightShader.setFloatUniform("angle", (PI.toFloat() / 4f))
-                                highlightShader.setFloatUniform("falloff", 1.8f)
-
-                                paint.shader = highlightShader
-                                nativeCanvas.drawRoundRect(0f, 0f, w, h, cornerRadius, cornerRadius, paint)
-                            }
                         }
                     } else {
-                        // Fallback when hardware AGSL is not present
-                        if (backdrop != null) {
-                            drawBackdropCrop(backdrop, Offset(posInRoot[0], posInRoot[1]), size)
-                        }
+                        drawBackdropCrop(backdrop, Offset(posInRoot[0], posInRoot[1]), size)
                     }
                 }
-            }
-            .border(BorderStroke(0.6.dp, palette.glassBorder), shape),
+
+                // 2. ULTRA-TRANSPARENT CRYSTAL BODY (Genuinely see-through, never opaque)
+                val bodyColor = if (palette.isDark) {
+                    Color(0xFF1E1E28).copy(alpha = 0.38f)
+                } else {
+                    Color(0xFFFFFFFF).copy(alpha = 0.30f)
+                }
+                drawRoundRect(color = bodyColor, cornerRadius = cRadius)
+
+                // 3. TOP CONVEX GLASS SHEEN (3D Liquid Glass Glaze)
+                drawRoundRect(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = if (palette.isDark) 0.32f else 0.50f),
+                            Color.White.copy(alpha = if (palette.isDark) 0.06f else 0.12f),
+                            Color.Transparent,
+                        ),
+                        startY = 0f,
+                        endY = h * 0.60f,
+                    ),
+                    cornerRadius = cRadius,
+                )
+
+                // 4. SPECULAR RIM HIGHLIGHT (The 45° Apple refraction rim)
+                drawRoundRect(
+                    brush = Brush.linearGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = if (palette.isDark) 0.75f else 0.85f),
+                            Color.White.copy(alpha = if (palette.isDark) 0.20f else 0.30f),
+                            Color.Transparent,
+                            Color.White.copy(alpha = if (palette.isDark) 0.15f else 0.20f),
+                        ),
+                        start = Offset(0f, 0f),
+                        end = Offset(w, h),
+                    ),
+                    style = Stroke(width = with(density) { 0.85.dp.toPx() }),
+                    cornerRadius = cRadius,
+                )
+            },
         contentAlignment = Alignment.Center,
     ) {
         CompositionLocalProvider(LocalContentColor provides palette.textPrimary) {
@@ -368,17 +312,17 @@ fun GlassCircleButton(
     val interaction = remember { MutableInteractionSource() }
     val isPressed by interaction.collectIsPressedAsState()
 
-    // Tactile bouncy spring animation
+    // Juicy tactile water-drop spring animation
     val scale by animateFloatAsState(
-        targetValue = if (isPressed && enabled) 0.90f else 1f,
+        targetValue = if (isPressed && enabled) 0.88f else 1f,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMedium,
+            stiffness = Spring.StiffnessMediumLow,
         ),
-        label = "liquid_glass_button_scale",
+        label = "liquid-bounce",
     )
 
-    Box(
+    GlassSurface(
         modifier = Modifier
             .size(size)
             .graphicsLayer {
@@ -386,21 +330,17 @@ fun GlassCircleButton(
                 scaleY = scale
             }
             .then(
-                clickableCompat(onClick, onLongClick, enabled, interaction)
+                clickableCompat(
+                    onClick = onClick,
+                    onLongClick = onLongClick,
+                    enabled = enabled,
+                    interactionSource = interaction,
+                )
             ),
-        contentAlignment = Alignment.Center,
+        shape = CircleShape,
+        elevation = if (isPressed) 4.dp else 10.dp,
+        chromaticAberration = true,
     ) {
-        GlassSurface(
-            modifier = Modifier.size(size),
-            shape = CircleShape,
-            elevation = 12.dp,
-            chromaticAberration = true,
-            isInteractive = isPressed && enabled,
-        ) {
-            Box(
-                modifier = Modifier.graphicsLayer { alpha = if (enabled) 1f else 0.35f },
-                contentAlignment = Alignment.Center,
-            ) { content() }
-        }
+        content()
     }
 }
