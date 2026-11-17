@@ -247,7 +247,7 @@ fun GlassSurface(
                 if (w > 0f && h > 0f) {
                     val cornerRadius = when (shape) {
                         is CircleShape -> min(w, h) / 2f
-                        is CornerBasedShape -> shape.topStart.toPx(size, this).coerceAtMost(min(w, h) / 2f)
+                        is CornerBasedShape -> shape.topStart.toPx(size, density).coerceAtMost(min(w, h) / 2f)
                         else -> min(w, h) / 2f
                     }
                     val radii = floatArrayOf(cornerRadius, cornerRadius, cornerRadius, cornerRadius)
@@ -255,7 +255,7 @@ fun GlassSurface(
                     if (refractionShader != null) {
                         drawIntoCanvas { canvas ->
                             val nativeCanvas = canvas.nativeCanvas
-                            val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+                            val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
 
                             val contentShader: Shader = if (backdrop != null && backdrop.image != null && backdrop.rootWidth > 0 && backdrop.rootHeight > 0) {
                                 val bmp = backdrop.image.asAndroidBitmap()
