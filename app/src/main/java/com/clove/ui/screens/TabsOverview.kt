@@ -146,8 +146,7 @@ fun TabsOverview(
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                items(tabs.size) { index ->
-                    val tab = tabs.getOrNull(index) ?: return@items
+                items(tabs) { tab ->
                     TabCard(
                         tab = tab,
                         selected = tab.id == currentTabId,
