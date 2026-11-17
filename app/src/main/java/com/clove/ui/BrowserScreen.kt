@@ -12,11 +12,14 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -29,6 +32,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -136,8 +141,8 @@ fun BrowserScreen(viewModel: BrowserViewModel) {
             .fillMaxSize()
             .background(palette.pageBackground),
     ) {
-        // ---------- Page content (inset below the status bar, like other browsers) ----------
-        Box(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
+        // ---------- Page content (expanded fully behind status bar, iOS Safari style) ----------
+        Box(modifier = Modifier.fillMaxSize()) {
             if (tab != null && tab.hasContent) {
                 key(tab.id) {
                     AndroidView(
@@ -165,6 +170,24 @@ fun BrowserScreen(viewModel: BrowserViewModel) {
                 )
             }
         }
+
+        // ---------- Subtle Top Status Bar Glass Scrim ----------
+        val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxWidth()
+                .height(statusBarHeight + 12.dp)
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            palette.pageBackground.copy(alpha = 0.70f),
+                            palette.pageBackground.copy(alpha = 0.35f),
+                            Color.Transparent,
+                        )
+                    )
+                )
+        )
 
         // ---------- Top loading hairline ----------
         val loading = tab?.isLoading == true

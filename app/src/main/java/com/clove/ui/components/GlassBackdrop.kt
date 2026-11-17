@@ -52,13 +52,13 @@ fun rememberGlassBackdrop(): Pair<State<GlassBackdrop?>, () -> Unit> {
     val capture: () -> Unit = remember {
         capture@{
             val now = SystemClock.uptimeMillis()
-            if (inFlight[0] || now - lastCapture[0] < 90L) return@capture
+            if (inFlight[0] || now - lastCapture[0] < 50L) return@capture
             val w = view.width
             val h = view.height
             if (w <= 0 || h <= 0) return@capture
             val window = (view.context as? Activity)?.window ?: return@capture
 
-            val scale = 0.16f
+            val scale = 0.22f
             val dw = (w * scale).toInt().coerceAtLeast(1)
             val dh = (h * scale).toInt().coerceAtLeast(1)
 
