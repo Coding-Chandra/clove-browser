@@ -21,6 +21,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -37,7 +38,6 @@ import androidx.compose.ui.unit.dp
 import com.clove.ui.theme.LocalSafariPalette
 import org.intellij.lang.annotations.Language
 import kotlin.math.PI
-import kotlin.math.min
 
 // ============================================================================
 // AGSL Shaders from Kyant0/AndroidLiquidGlass
@@ -145,10 +145,11 @@ fun GlassSurface(
                 val h = size.height
                 if (w <= 0f || h <= 0f) return@drawBehind
 
-                val cornerRadius = when {
-                    shape == CircleShape -> min(w, h) / 2f
-                    shape is CornerBasedShape -> shape.topStart.toPx(size, density).coerceAtMost(min(w, h) / 2f)
-                    else -> min(w, h) / 2f
+                val maxR = size.minDimension / 2f
+                val cornerRadius = when (shape) {
+                    CircleShape -> maxR
+                    is CornerBasedShape -> shape.topStart.toPx(size, density).coerceAtMost(maxR)
+                    else -> maxR
                 }
                 val radii = floatArrayOf(cornerRadius, cornerRadius, cornerRadius, cornerRadius)
                 val cRadius = CornerRadius(cornerRadius, cornerRadius)
