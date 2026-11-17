@@ -35,8 +35,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import com.clove.browser.TabState
 import com.clove.ui.theme.LocalSafariPalette
 import com.composables.icons.lucide.BookOpen
@@ -67,19 +65,15 @@ fun PageFormatMenu(
 ) {
     val palette = LocalSafariPalette.current
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false),
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.35f))
+            .clickableCompat(onClick = onDismiss)
+            .navigationBarsPadding()
+            .padding(horizontal = 20.dp, vertical = 76.dp),
+        contentAlignment = Alignment.BottomCenter,
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.28f))
-                .clickableCompat(onClick = onDismiss)
-                .navigationBarsPadding()
-                .padding(horizontal = 20.dp, vertical = 76.dp),
-            contentAlignment = Alignment.BottomCenter,
-        ) {
             GlassSurface(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -235,7 +229,6 @@ fun PageFormatMenu(
             }
         }
     }
-}
 
 @Composable
 private fun PageMenuRow(

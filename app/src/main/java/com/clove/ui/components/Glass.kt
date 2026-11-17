@@ -1,6 +1,5 @@
 package com.clove.ui.components
 
-import android.graphics.Color as AndroidColor
 import android.graphics.Paint
 import android.graphics.RuntimeShader
 import androidx.compose.animation.core.Spring
@@ -40,7 +39,7 @@ import org.intellij.lang.annotations.Language
 import kotlin.math.PI
 
 // ============================================================================
-// AGSL Shaders from Kyant0/AndroidLiquidGlass
+// AGSL Shaders inspired by Kyant0/AndroidLiquidGlass
 // ============================================================================
 
 @Language("AGSL")
@@ -65,7 +64,9 @@ float sdRoundedRect(float2 coord, float2 halfSize, float radius) {
 float2 gradSdRoundedRect(float2 coord, float2 halfSize, float radius) {
     float2 cornerCoord = abs(coord) - (halfSize - float2(radius));
     if (cornerCoord.x >= 0.0 || cornerCoord.y >= 0.0) {
-        return sign(coord) * normalize(max(cornerCoord, 0.0));
+        float2 v = max(cornerCoord, 0.0);
+        float len = length(v);
+        return sign(coord) * (len > 0.0001 ? (v / len) : float2(0.7071, 0.7071));
     } else {
         float gradX = step(cornerCoord.y, cornerCoord.x);
         return sign(coord) * float2(gradX, 1.0 - gradX);
@@ -76,15 +77,15 @@ float2 gradSdRoundedRect(float2 coord, float2 halfSize, float radius) {
 /**
  * Kyant's physical 45° incident light highlight shader from AndroidLiquidGlass.
  * Calculates exact SDF normals and shines dynamic specular light highlights
- * on the curved rim of capsules and rounded rectangles.
+ * on the curved rim of capsules and rounded rectangles with zero division-by-zero risk.
  */
 @Language("AGSL")
 private const val KyantHighlightShaderString = """
 uniform float2 size;
 uniform float4 cornerRadii;
-layout(color) uniform half4 color;
 uniform float angle;
 uniform float falloff;
+uniform float alpha;
 
 $RoundedRectSDF
 
@@ -97,18 +98,19 @@ half4 main(float2 coord) {
     float2 grad = gradSdRoundedRect(centeredCoord, halfSize, gradRadius);
     float2 normal = float2(cos(angle), sin(angle));
     float d = dot(grad, normal);
-    float intensity = pow(abs(d), falloff);
-    return color * intensity;
+    float intensity = pow(clamp(abs(d), 0.0001, 1.0), falloff);
+    return half4(1.0, 1.0, 1.0, alpha) * intensity;
 }
 """
 
 /**
  * A true crystal "liquid glass" surface inspired by Kyant0/AndroidLiquidGlass:
- * - High optical transparency: genuine see-through translucent liquid body (never opaque)
- * - Continuous SDF rounded-rect physical specular rim highlight (Kyant's 45° incident light)
- * - 3D convex glass glaze highlight
- * - Bottom Fresnel ambient glow
- * - 0.65dp inner glass bevel refraction rim
+ * - Rich translucent optical viscosity (milky frosted in light, obsidian smoky in dark)
+ * - Inner refractive trough creating physical lens curvature
+ * - 3D convex dome light glaze reflection
+ * - Fresnel caustic ambient glow
+ * - Continuous SDF physical specular rim highlight (Kyant's 45° incident light)
+ * - 0.75dp inner glass bevel refraction bead
  * - Ambient drop shadow
  */
 @Composable
@@ -154,84 +156,90 @@ fun GlassSurface(
                 val radii = floatArrayOf(cornerRadius, cornerRadius, cornerRadius, cornerRadius)
                 val cRadius = CornerRadius(cornerRadius, cornerRadius)
 
-                // 1. GENUINE TRANSLUCENT LIQUID GLASS BODY (Crystal optical transparency)
+                // 1. LIQUID GLASS FROSTED BODY (Rich optical viscosity, never flat clear)
                 val bodyColor = if (palette.isDark) {
-                    Color(0xFF141418).copy(alpha = 0.48f)
+                    Color(0xFF1E1E26).copy(alpha = 0.78f)
                 } else {
-                    Color(0xFFFAFAFA).copy(alpha = 0.42f)
+                    Color(0xFFF6F6FA).copy(alpha = 0.76f)
                 }
                 drawRoundRect(color = bodyColor, cornerRadius = cRadius)
 
-                // 2. 3D CONVEX GLASS GLAZE (Top light reflection on lens curvature)
+                // 2. INNER REFRACTIVE TROUGH (Physical double-rim lens curvature)
+                drawRoundRect(
+                    color = if (palette.isDark) Color.Black.copy(alpha = 0.35f) else Color(0xFF404050).copy(alpha = 0.12f),
+                    style = Stroke(width = with(density) { 2.4.dp.toPx() }),
+                    cornerRadius = cRadius,
+                )
+
+                // 3. 3D CONVEX GLASS DOME GLAZE (Upper specular curve)
                 drawRoundRect(
                     brush = Brush.verticalGradient(
                         colors = listOf(
-                            Color.White.copy(alpha = if (palette.isDark) 0.18f else 0.42f),
-                            Color.White.copy(alpha = if (palette.isDark) 0.04f else 0.10f),
+                            Color.White.copy(alpha = if (palette.isDark) 0.35f else 0.65f),
+                            Color.White.copy(alpha = if (palette.isDark) 0.08f else 0.18f),
                             Color.Transparent,
                         ),
                         startY = 0f,
-                        endY = h * 0.55f,
+                        endY = h * 0.52f,
                     ),
                     cornerRadius = cRadius,
                 )
 
-                // 3. FRESNEL AMBIENT RIM GLOW (Subtle bottom-up ambient reflection)
+                // 4. FRESNEL CAUSTIC GLOW (Lower liquid rim refraction)
                 drawRoundRect(
                     brush = Brush.verticalGradient(
                         colors = listOf(
                             Color.Transparent,
-                            Color.White.copy(alpha = if (palette.isDark) 0.03f else 0.06f),
-                            Color.White.copy(alpha = if (palette.isDark) 0.10f else 0.18f),
+                            Color.White.copy(alpha = if (palette.isDark) 0.04f else 0.10f),
+                            Color.White.copy(alpha = if (palette.isDark) 0.18f else 0.35f),
                         ),
-                        startY = h * 0.70f,
+                        startY = h * 0.65f,
                         endY = h,
                     ),
                     cornerRadius = cRadius,
                 )
 
-                // 4. KYANT0 SDF 45° SPECULAR RIM HIGHLIGHT
-                if (highlightShader != null) {
-                    drawIntoCanvas { canvas ->
-                        val strokeWidthPx = with(density) { 1.25.dp.toPx() }
-                        highlightShader.setFloatUniform("size", w, h)
-                        highlightShader.setFloatUniform("cornerRadii", radii)
-                        highlightShader.setColorUniform(
-                            "color",
-                            AndroidColor.valueOf(1f, 1f, 1f, if (palette.isDark) 0.75f else 0.90f)
-                        )
-                        highlightShader.setFloatUniform("angle", (45f * (PI / 180f)).toFloat())
-                        highlightShader.setFloatUniform("falloff", 1.0f)
-
-                        val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                            style = Paint.Style.STROKE
-                            strokeWidth = strokeWidthPx
-                            shader = highlightShader
-                        }
-                        canvas.nativeCanvas.drawRoundRect(0f, 0f, w, h, cornerRadius, cornerRadius, strokePaint)
-                    }
-                } else {
-                    // Fallback: 45° dual specular gradient stroke
-                    drawRoundRect(
-                        brush = Brush.linearGradient(
-                            colors = listOf(
-                                Color.White.copy(alpha = if (palette.isDark) 0.75f else 0.90f),
-                                Color.White.copy(alpha = if (palette.isDark) 0.20f else 0.30f),
-                                Color.Transparent,
-                                Color.White.copy(alpha = if (palette.isDark) 0.22f else 0.30f),
-                            ),
-                            start = Offset(0f, 0f),
-                            end = Offset(w, h),
+                // 5. 45° PHYSICAL SPECULAR RIM HIGHLIGHT
+                drawRoundRect(
+                    brush = Brush.linearGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = if (palette.isDark) 0.85f else 0.95f),
+                            Color.White.copy(alpha = if (palette.isDark) 0.25f else 0.40f),
+                            Color.Transparent,
+                            Color.White.copy(alpha = if (palette.isDark) 0.25f else 0.35f),
                         ),
-                        style = Stroke(width = with(density) { 1.dp.toPx() }),
-                        cornerRadius = cRadius,
-                    )
+                        start = Offset(0f, 0f),
+                        end = Offset(w, h),
+                    ),
+                    style = Stroke(width = with(density) { 1.35.dp.toPx() }),
+                    cornerRadius = cRadius,
+                )
+
+                // 6. KYANT0 SDF 45° ACCENT HIGHLIGHT (if AGSL is supported)
+                if (highlightShader != null) {
+                    try {
+                        drawIntoCanvas { canvas ->
+                            val strokeWidthPx = with(density) { 1.35.dp.toPx() }
+                            highlightShader.setFloatUniform("size", w, h)
+                            highlightShader.setFloatUniform("cornerRadii", radii)
+                            highlightShader.setFloatUniform("angle", (45f * (PI / 180f)).toFloat())
+                            highlightShader.setFloatUniform("falloff", 1.0f)
+                            highlightShader.setFloatUniform("alpha", if (palette.isDark) 0.85f else 0.95f)
+
+                            val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                                style = Paint.Style.STROKE
+                                strokeWidth = strokeWidthPx
+                                shader = highlightShader
+                            }
+                            canvas.nativeCanvas.drawRoundRect(0f, 0f, w, h, cornerRadius, cornerRadius, strokePaint)
+                        }
+                    } catch (_: Throwable) {}
                 }
 
-                // 5. INNER GLASS BEVEL RIM (0.65dp crisp refraction border)
+                // 7. INNER CRISP REFRACTION BEVEL (0.75dp edge bead)
                 drawRoundRect(
-                    color = Color.White.copy(alpha = if (palette.isDark) 0.15f else 0.25f),
-                    style = Stroke(width = with(density) { 0.65.dp.toPx() }),
+                    color = Color.White.copy(alpha = if (palette.isDark) 0.22f else 0.35f),
+                    style = Stroke(width = with(density) { 0.75.dp.toPx() }),
                     cornerRadius = cRadius,
                 )
             },
@@ -275,13 +283,12 @@ fun GlassCircleButton(
                 scaleX = scale
                 scaleY = scale
             }
-            .then(
-                clickableCompat(
-                    onClick = onClick,
-                    onLongClick = onLongClick,
-                    enabled = enabled,
-                    interactionSource = interaction,
-                )
+            .clip(CircleShape)
+            .clickableCompat(
+                onClick = onClick,
+                onLongClick = onLongClick,
+                enabled = enabled,
+                interactionSource = interaction,
             ),
         shape = CircleShape,
         elevation = if (isPressed) 3.dp else 10.dp,

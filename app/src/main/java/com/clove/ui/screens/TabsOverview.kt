@@ -23,7 +23,6 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -69,40 +68,6 @@ fun TabsOverview(
     val palette = LocalSafariPalette.current
     var showNewGroupDialog by remember { mutableStateOf(false) }
     var newGroupName by remember { mutableStateOf("") }
-
-    if (showNewGroupDialog) {
-        AlertDialog(
-            onDismissRequest = { showNewGroupDialog = false },
-            title = { Text("New Tab Group", color = palette.textPrimary, fontWeight = FontWeight.Bold) },
-            text = {
-                OutlinedTextField(
-                    value = newGroupName,
-                    onValueChange = { newGroupName = it },
-                    label = { Text("Group Name") },
-                    singleLine = true,
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        val name = newGroupName.trim()
-                        if (name.isNotEmpty()) {
-                            onAddTabGroup(name)
-                        }
-                        newGroupName = ""
-                        showNewGroupDialog = false
-                    }
-                ) {
-                    Text("Create", color = palette.accent, fontWeight = FontWeight.SemiBold)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showNewGroupDialog = false }) {
-                    Text("Cancel", color = palette.textSecondary)
-                }
-            },
-        )
-    }
 
     Box(
         modifier = Modifier
@@ -176,12 +141,13 @@ fun TabsOverview(
 
             LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 8.dp, bottom = 120.dp),
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                items(tabs, key = { it.id }) { tab ->
+                items(tabs.size) { index ->
+                    val tab = tabs.getOrNull(index) ?: return@items
                     TabCard(
                         tab = tab,
                         selected = tab.id == currentTabId,
@@ -243,6 +209,69 @@ fun TabsOverview(
                         .then(clickableCompat(onClick = onDone))
                         .padding(horizontal = 8.dp, vertical = 4.dp),
                 )
+            }
+        }
+
+        if (showNewGroupDialog) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.45f))
+                    .clickableCompat(onClick = { showNewGroupDialog = false })
+                    .padding(24.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                GlassSurface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickableCompat(onClick = {})
+                        .clip(RoundedCornerShape(24.dp)),
+                    shape = RoundedCornerShape(24.dp),
+                    elevation = 20.dp,
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(20.dp),
+                    ) {
+                        Text(
+                            text = "New Tab Group",
+                            color = palette.textPrimary,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Spacer(modifier = Modifier.height(14.dp))
+                        OutlinedTextField(
+                            value = newGroupName,
+                            onValueChange = { newGroupName = it },
+                            label = { Text("Group Name") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Spacer(modifier = Modifier.height(18.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End,
+                        ) {
+                            TextButton(onClick = { showNewGroupDialog = false }) {
+                                Text("Cancel", color = palette.textSecondary)
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            TextButton(
+                                onClick = {
+                                    val name = newGroupName.trim()
+                                    if (name.isNotEmpty()) {
+                                        onAddTabGroup(name)
+                                    }
+                                    newGroupName = ""
+                                    showNewGroupDialog = false
+                                }
+                            ) {
+                                Text("Create", color = palette.accent, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                    }
+                }
             }
         }
     }
