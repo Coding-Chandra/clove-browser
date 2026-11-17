@@ -267,14 +267,8 @@ fun BrowserScreen(viewModel: BrowserViewModel) {
     }
 
     // ---------- Safari Page Format Menu (aA popup) ----------
-    AnimatedVisibility(
-        visible = showPageFormat && tab != null,
-        enter = fadeIn(animationSpec = androidx.compose.animation.core.tween(150)),
-        exit = fadeOut(animationSpec = androidx.compose.animation.core.tween(150)),
-        modifier = Modifier.zIndex(5f),
-    ) {
-        if (tab != null) {
-            PageFormatMenu(
+    if (showPageFormat && tab != null) {
+        PageFormatMenu(
             tab = tab,
             onZoomIn = {
                 viewModel.adjustTextZoom(tab, +15)
@@ -312,8 +306,7 @@ fun BrowserScreen(viewModel: BrowserViewModel) {
                 tab.findActive = true
             },
             onDismiss = { showPageFormat = false },
-            )
-        }
+        )
     }
 
     // ---------- Safari Reader View Fullscreen Overlay ----------
