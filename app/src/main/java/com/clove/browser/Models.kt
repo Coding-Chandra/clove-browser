@@ -20,6 +20,19 @@ class TabState(
     var canGoBack by mutableStateOf(false)
     var canGoForward by mutableStateOf(false)
 
+    // Safari options: text zoom, desktop UA, reader mode, distraction control, find on page, tab groups
+    var textZoom by mutableStateOf(100)
+    var isDesktopSite by mutableStateOf(false)
+    var isReaderMode by mutableStateOf(false)
+    var readerTitle by mutableStateOf("")
+    var readerContent by mutableStateOf("")
+    var isDistractionControlActive by mutableStateOf(false)
+    var tabGroup by mutableStateOf("Personal")
+    var findQuery by mutableStateOf("")
+    var findActive by mutableStateOf(false)
+    var findCurrentMatch by mutableStateOf(0)
+    var findTotalMatches by mutableStateOf(0)
+
     /** Set when we want the underlying WebView to (re)load a url on next composition. */
     var pendingUrl by mutableStateOf(initialUrl)
 

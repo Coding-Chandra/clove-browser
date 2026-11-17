@@ -61,6 +61,7 @@ fun BrowserToolbar(
     onMore: () -> Unit,
     onBookmarks: () -> Unit,
     onTabs: () -> Unit,
+    onFormatMenu: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val palette = LocalSafariPalette.current
@@ -95,7 +96,7 @@ fun BrowserToolbar(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
+                    .padding(horizontal = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (host.isBlank()) {
@@ -116,29 +117,62 @@ fun BrowserToolbar(
                         }
                     }
                 } else {
-                    // Lock icon, hard left.
-                    Icon(
-                        if (isSecure) Lucide.Lock else Lucide.Globe,
-                        contentDescription = if (isSecure) "Secure" else "Site",
-                        tint = palette.textSecondary,
+                    // Safari "aA" Format Button, hard left.
+                    Box(
                         modifier = Modifier
-                            .size(16.dp)
-                            .graphicsLayer { alpha = edgeIconAlpha },
-                    )
-                    // Domain, centered in between.
-                    Text(
-                        text = host,
-                        color = palette.textPrimary,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        textAlign = TextAlign.Center,
+                            .graphicsLayer { alpha = edgeIconAlpha }
+                            .clip(RoundedCornerShape(8.dp))
+                            .then(clickableCompat(onClick = onFormatMenu))
+                            .padding(horizontal = 4.dp, vertical = 2.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Row(verticalAlignment = Alignment.Bottom) {
+                            Text(
+                                text = "a",
+                                color = if (tab?.isReaderMode == true || tab?.isDistractionControlActive == true) palette.accent else palette.textPrimary,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            Text(
+                                text = "A",
+                                color = if (tab?.isReaderMode == true || tab?.isDistractionControlActive == true) palette.accent else palette.textPrimary,
+                                fontSize = 17.sp,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+                    }
+
+                    // Domain with lock indicator, centered.
+                    Row(
                         modifier = Modifier
                             .weight(1f)
                             .padding(horizontal = 8.dp)
                             .then(clickableCompat(onClick = onAddressTap)),
-                    )
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center,
+                    ) {
+                        if (isSecure) {
+                            Icon(
+                                Lucide.Lock,
+                                contentDescription = "Secure",
+                                tint = palette.textSecondary,
+                                modifier = Modifier
+                                    .size(12.dp)
+                                    .graphicsLayer { alpha = edgeIconAlpha },
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                        }
+                        Text(
+                            text = host,
+                            color = palette.textPrimary,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+
                     // Reload / stop, hard right.
                     Box(
                         modifier = Modifier

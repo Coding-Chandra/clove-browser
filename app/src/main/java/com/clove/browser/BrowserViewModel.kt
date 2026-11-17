@@ -28,8 +28,10 @@ class BrowserViewModel(app: Application) : AndroidViewModel(app) {
     var settings by mutableStateOf(Settings())
         private set
 
-    // ---- tabs ----
+    // ---- tabs & Safari tab groups ----
     val tabs: SnapshotStateList<TabState> = mutableStateListOf()
+    val tabGroups: SnapshotStateList<String> = mutableStateListOf("Personal", "Work", "Research")
+    var selectedTabGroup by mutableStateOf("Personal")
     var currentTabId by mutableStateOf<String?>(null)
         private set
     var isPrivateMode by mutableStateOf(false)
@@ -42,7 +44,7 @@ class BrowserViewModel(app: Application) : AndroidViewModel(app) {
         readingList.addAll(store.loadReadingList())
         downloads.addAll(store.loadDownloads())
         // Start with a single, empty normal tab (native Start Page).
-        val first = TabState(isPrivate = false)
+        val first = TabState(isPrivate = false).apply { tabGroup = "Personal" }
         tabs.add(first)
         currentTabId = first.id
     }
@@ -52,9 +54,13 @@ class BrowserViewModel(app: Application) : AndroidViewModel(app) {
     val currentTab: TabState?
         get() = tabs.firstOrNull { it.id == currentTabId }
 
-    /** Tabs belonging to the currently active environment (normal vs private). */
+    /** Tabs belonging to the currently active environment (normal/group vs private). */
     val visibleTabs: List<TabState>
-        get() = tabs.filter { it.isPrivate == isPrivateMode }
+        get() = if (isPrivateMode) {
+            tabs.filter { it.isPrivate }
+        } else {
+            tabs.filter { !it.isPrivate && it.tabGroup == selectedTabGroup }
+        }
 
     val visibleTabCount: Int get() = visibleTabs.size
 
@@ -96,13 +102,23 @@ class BrowserViewModel(app: Application) : AndroidViewModel(app) {
         return Regex("^[\\w-]+(\\.[\\w-]+)+(/.*)?$").matches(s)
     }
 
-    // ---------------- tab management ----------------
+    // ---------------- tab management & Safari options ----------------
 
-    fun newTab(private: Boolean = isPrivateMode, url: String? = null, select: Boolean = true): TabState {
-        val tab = TabState(isPrivate = private, initialUrl = url)
+    fun newTab(
+        private: Boolean = isPrivateMode,
+        url: String? = null,
+        select: Boolean = true,
+        group: String = selectedTabGroup
+    ): TabState {
+        val tab = TabState(isPrivate = private, initialUrl = url).apply {
+            if (!private) tabGroup = group
+        }
         tabs.add(tab)
         if (select) {
             isPrivateMode = private
+            if (!private) {
+                selectedTabGroup = group
+            }
             currentTabId = tab.id
         }
         return tab
@@ -111,6 +127,9 @@ class BrowserViewModel(app: Application) : AndroidViewModel(app) {
     fun selectTab(id: String) {
         val tab = tabs.firstOrNull { it.id == id } ?: return
         isPrivateMode = tab.isPrivate
+        if (!tab.isPrivate) {
+            selectedTabGroup = tab.tabGroup
+        }
         currentTabId = id
     }
 
@@ -120,20 +139,54 @@ class BrowserViewModel(app: Application) : AndroidViewModel(app) {
         val closing = tabs[index]
         tabs.removeAt(index)
         if (currentTabId == id) {
-            // Select a neighbouring tab within the same environment, else create a fresh one.
-            val sameMode = tabs.filter { it.isPrivate == closing.isPrivate }
+            val sameMode = if (closing.isPrivate) {
+                tabs.filter { it.isPrivate }
+            } else {
+                tabs.filter { !it.isPrivate && it.tabGroup == closing.tabGroup }
+            }
             currentTabId = sameMode.lastOrNull()?.id ?: run {
-                val fresh = TabState(isPrivate = closing.isPrivate)
+                val fresh = TabState(isPrivate = closing.isPrivate).apply {
+                    if (!closing.isPrivate) tabGroup = closing.tabGroup
+                }
                 tabs.add(fresh)
                 fresh.id
             }
         }
     }
 
+    fun switchTabGroup(group: String) {
+        selectedTabGroup = group
+        isPrivateMode = false
+        val matching = tabs.filter { !it.isPrivate && it.tabGroup == group }
+        if (matching.isNotEmpty()) {
+            currentTabId = matching.first().id
+        } else {
+            val fresh = TabState(isPrivate = false).apply { tabGroup = group }
+            tabs.add(fresh)
+            currentTabId = fresh.id
+        }
+    }
+
+    fun addTabGroup(name: String) {
+        val clean = name.trim()
+        if (clean.isNotBlank() && clean !in tabGroups) {
+            tabGroups.add(clean)
+            switchTabGroup(clean)
+        }
+    }
+
+    fun moveTabToGroup(tabId: String, newGroup: String) {
+        tabs.firstOrNull { it.id == tabId }?.let {
+            it.tabGroup = newGroup
+        }
+    }
+
     fun closeAllVisibleTabs() {
-        val toClose = tabs.filter { it.isPrivate == isPrivateMode }.map { it.id }
+        val toClose = visibleTabs.map { it.id }
         toClose.forEach { id -> tabs.removeAll { it.id == id } }
-        val fresh = TabState(isPrivate = isPrivateMode)
+        val fresh = TabState(isPrivate = isPrivateMode).apply {
+            if (!isPrivateMode) tabGroup = selectedTabGroup
+        }
         tabs.add(fresh)
         currentTabId = fresh.id
     }
@@ -141,8 +194,27 @@ class BrowserViewModel(app: Application) : AndroidViewModel(app) {
     fun switchPrivateMode(private: Boolean) {
         if (private == isPrivateMode) return
         isPrivateMode = private
-        val existing = tabs.firstOrNull { it.isPrivate == private }
-        currentTabId = existing?.id ?: newTab(private, select = false).also { it }.id
+        val matching = if (private) {
+            tabs.filter { it.isPrivate }
+        } else {
+            tabs.filter { !it.isPrivate && it.tabGroup == selectedTabGroup }
+        }
+        currentTabId = matching.firstOrNull()?.id ?: run {
+            val fresh = TabState(isPrivate = private).apply {
+                if (!private) tabGroup = selectedTabGroup
+            }
+            tabs.add(fresh)
+            fresh.id
+        }
+    }
+
+    fun adjustTextZoom(tab: TabState, delta: Int) {
+        val newZoom = (tab.textZoom + delta).coerceIn(50, 250)
+        tab.textZoom = newZoom
+    }
+
+    fun toggleDesktopSite(tab: TabState) {
+        tab.isDesktopSite = !tab.isDesktopSite
     }
 
     // ---------------- history ----------------

@@ -40,12 +40,20 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.zIndex
 import com.clove.browser.BrowserViewModel
+import com.clove.browser.web.applySafariSettings
 import com.clove.browser.web.captureThumbnail
 import com.clove.browser.web.createBrowserWebView
+import com.clove.browser.web.disableDistractionControl
+import com.clove.browser.web.enableDistractionControl
+import com.clove.browser.web.extractReaderContent
 import com.clove.ui.components.AddressEditor
 import com.clove.ui.components.BrowserToolbar
+import com.clove.ui.components.DistractionBanner
+import com.clove.ui.components.FindOnPageBar
 import com.clove.ui.components.LocalGlassBackdrop
 import com.clove.ui.components.MoreMenu
+import com.clove.ui.components.PageFormatMenu
+import com.clove.ui.components.ReaderView
 import com.clove.ui.components.rememberGlassBackdrop
 import com.clove.ui.screens.DownloadsSheet
 import com.clove.ui.screens.LibrarySheet
@@ -68,6 +76,7 @@ fun BrowserScreen(viewModel: BrowserViewModel) {
     var overlay by remember { mutableStateOf(Overlay.NONE) }
     var libraryTab by remember { mutableStateOf(LibraryTab.BOOKMARKS) }
     var showMore by remember { mutableStateOf(false) }
+    var showPageFormat by remember { mutableStateOf(false) }
     var editingAddress by remember { mutableStateOf(false) }
 
     // ---- live frosted-glass backdrop (real blur over the WebView) ----
@@ -126,9 +135,16 @@ fun BrowserScreen(viewModel: BrowserViewModel) {
     }
 
     // ---- system back ----
-    val handleBack = editingAddress || showMore || overlay != Overlay.NONE || tab?.canGoBack == true
+    val handleBack = editingAddress || showMore || showPageFormat || tab?.findActive == true || tab?.isReaderMode == true || overlay != Overlay.NONE || tab?.canGoBack == true
     BackHandler(enabled = handleBack) {
         when {
+            showPageFormat -> showPageFormat = false
+            tab?.findActive == true -> {
+                tab.findActive = false
+                tab.findQuery = ""
+                activeWebView()?.clearMatches()
+            }
+            tab?.isReaderMode == true -> tab.isReaderMode = false
             editingAddress -> editingAddress = false
             showMore -> showMore = false
             overlay != Overlay.NONE -> overlay = Overlay.NONE
@@ -208,31 +224,122 @@ fun BrowserScreen(viewModel: BrowserViewModel) {
             }
         }
 
-        // ---------- Floating toolbar ----------
+        // ---------- Floating toolbar & Safari floating controls ----------
         if (overlay == Overlay.NONE && !editingAddress) {
             val toolbarModifier = Modifier
                 .align(Alignment.BottomCenter)
                 .navigationBarsPadding()
                 .padding(horizontal = 10.dp, vertical = 8.dp)
+
             CompositionLocalProvider(LocalGlassBackdrop provides glassBackdropState) {
-                BrowserToolbar(
-                    tab = tab,
-                    collapseFraction = collapseFraction,
-                    onBack = { activeWebView()?.let { if (it.canGoBack()) it.goBack() } },
-                    onForward = { activeWebView()?.let { if (it.canGoForward()) it.goForward() } },
-                    onShare = { shareCurrent() },
-                    onReloadOrStop = {
-                        val wv = activeWebView()
-                        if (tab?.isLoading == true) wv?.stopLoading() else wv?.reload()
-                    },
-                    onAddressTap = { editingAddress = true },
-                    onMore = { showMore = true },
-                    onBookmarks = { libraryTab = LibraryTab.BOOKMARKS; overlay = Overlay.LIBRARY },
-                    onTabs = { captureCurrentThumbnail(); overlay = Overlay.TABS },
-                    modifier = toolbarModifier,
-                )
+                when {
+                    tab?.findActive == true -> {
+                        FindOnPageBar(
+                            query = tab.findQuery,
+                            currentMatch = tab.findCurrentMatch,
+                            totalMatches = tab.findTotalMatches,
+                            onQueryChange = { q ->
+                                tab.findQuery = q
+                                activeWebView()?.findAllAsync(q)
+                            },
+                            onNext = { activeWebView()?.findNext(true) },
+                            onPrevious = { activeWebView()?.findNext(false) },
+                            onClose = {
+                                tab.findActive = false
+                                tab.findQuery = ""
+                                activeWebView()?.clearMatches()
+                            },
+                            modifier = toolbarModifier,
+                        )
+                    }
+                    tab?.isDistractionControlActive == true -> {
+                        DistractionBanner(
+                            onDone = {
+                                tab.isDistractionControlActive = false
+                                activeWebView()?.disableDistractionControl()
+                            },
+                            modifier = toolbarModifier,
+                        )
+                    }
+                    else -> {
+                        BrowserToolbar(
+                            tab = tab,
+                            collapseFraction = collapseFraction,
+                            onBack = { activeWebView()?.let { if (it.canGoBack()) it.goBack() } },
+                            onForward = { activeWebView()?.let { if (it.canGoForward()) it.goForward() } },
+                            onShare = { shareCurrent() },
+                            onReloadOrStop = {
+                                val wv = activeWebView()
+                                if (tab?.isLoading == true) wv?.stopLoading() else wv?.reload()
+                            },
+                            onAddressTap = { editingAddress = true },
+                            onMore = { showMore = true },
+                            onBookmarks = { libraryTab = LibraryTab.BOOKMARKS; overlay = Overlay.LIBRARY },
+                            onTabs = { captureCurrentThumbnail(); overlay = Overlay.TABS },
+                            onFormatMenu = { showPageFormat = true },
+                            modifier = toolbarModifier,
+                        )
+                    }
+                }
             }
         }
+    }
+
+    // ---------- Safari Page Format Menu (aA popup) ----------
+    if (showPageFormat && tab != null) {
+        PageFormatMenu(
+            tab = tab,
+            onZoomIn = {
+                viewModel.adjustTextZoom(tab, +15)
+                activeWebView()?.applySafariSettings(tab)
+            },
+            onZoomOut = {
+                viewModel.adjustTextZoom(tab, -15)
+                activeWebView()?.applySafariSettings(tab)
+            },
+            onToggleReader = {
+                val willBeReader = !tab.isReaderMode
+                tab.isReaderMode = willBeReader
+                if (willBeReader) {
+                    activeWebView()?.extractReaderContent { title, html ->
+                        tab.readerTitle = title
+                        tab.readerContent = html
+                    }
+                }
+            },
+            onToggleDistractionControl = {
+                val willBeActive = !tab.isDistractionControlActive
+                tab.isDistractionControlActive = willBeActive
+                val wv = activeWebView()
+                if (willBeActive) {
+                    wv?.enableDistractionControl()
+                } else {
+                    wv?.disableDistractionControl()
+                }
+            },
+            onToggleDesktopSite = {
+                viewModel.toggleDesktopSite(tab)
+                activeWebView()?.applySafariSettings(tab)
+            },
+            onFindOnPage = {
+                tab.findActive = true
+            },
+            onDismiss = { showPageFormat = false },
+        )
+    }
+
+    // ---------- Safari Reader View Fullscreen Overlay ----------
+    AnimatedVisibility(
+        visible = tab?.isReaderMode == true,
+        enter = fadeIn() + slideInVertically { it / 8 },
+        exit = fadeOut() + slideOutVertically { it / 8 },
+        modifier = Modifier.zIndex(4f),
+    ) {
+        ReaderView(
+            title = tab?.readerTitle ?: tab?.title ?: "",
+            contentHtml = tab?.readerContent ?: "",
+            onClose = { tab?.isReaderMode = false },
+        )
     }
 
     // ---------- More menu popover ----------
@@ -291,6 +398,10 @@ fun BrowserScreen(viewModel: BrowserViewModel) {
             tabs = viewModel.visibleTabs,
             currentTabId = viewModel.currentTabId,
             isPrivate = viewModel.isPrivateMode,
+            tabGroups = viewModel.tabGroups,
+            selectedTabGroup = viewModel.selectedTabGroup,
+            onSelectTabGroup = viewModel::switchTabGroup,
+            onAddTabGroup = viewModel::addTabGroup,
             onSelect = { id -> viewModel.selectTab(id); overlay = Overlay.NONE },
             onClose = { id -> viewModel.closeTab(id) },
             onNewTab = { viewModel.newTab(); overlay = Overlay.NONE; editingAddress = true },

@@ -15,14 +15,23 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -48,6 +57,10 @@ fun TabsOverview(
     tabs: List<TabState>,
     currentTabId: String?,
     isPrivate: Boolean,
+    tabGroups: List<String> = listOf("Personal", "Work", "Research"),
+    selectedTabGroup: String = "Personal",
+    onSelectTabGroup: (String) -> Unit = {},
+    onAddTabGroup: (String) -> Unit = {},
     onSelect: (String) -> Unit,
     onClose: (String) -> Unit,
     onNewTab: () -> Unit,
@@ -55,6 +68,42 @@ fun TabsOverview(
     onDone: () -> Unit,
 ) {
     val palette = LocalSafariPalette.current
+    var showNewGroupDialog by remember { mutableStateOf(false) }
+    var newGroupName by remember { mutableStateOf("") }
+
+    if (showNewGroupDialog) {
+        AlertDialog(
+            onDismissRequest = { showNewGroupDialog = false },
+            title = { Text("New Tab Group", color = palette.textPrimary, fontWeight = FontWeight.Bold) },
+            text = {
+                OutlinedTextField(
+                    value = newGroupName,
+                    onValueChange = { newGroupName = it },
+                    label = { Text("Group Name") },
+                    singleLine = true,
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val name = newGroupName.trim()
+                        if (name.isNotEmpty()) {
+                            onAddTabGroup(name)
+                        }
+                        newGroupName = ""
+                        showNewGroupDialog = false
+                    }
+                ) {
+                    Text("Create", color = palette.accent, fontWeight = FontWeight.SemiBold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showNewGroupDialog = false }) {
+                    Text("Cancel", color = palette.textSecondary)
+                }
+            },
+        )
+    }
 
     Box(
         modifier = Modifier
@@ -63,23 +112,73 @@ fun TabsOverview(
             .consumeClicks(),
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // Title
+            // Safari Header Title
             Text(
-                text = if (isPrivate) "Private" else "${tabs.size} Tab${if (tabs.size == 1) "" else "s"}",
+                text = if (isPrivate) "Private Browsing" else "$selectedTabGroup — ${tabs.size} Tab${if (tabs.size == 1) "" else "s"}",
                 color = palette.textPrimary,
                 fontSize = 17.sp,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier
                     .statusBarsPadding()
                     .fillMaxWidth()
-                    .padding(vertical = 14.dp),
+                    .padding(top = 14.dp, bottom = 8.dp),
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             )
+
+            // Safari Tab Groups horizontal pills
+            if (!isPrivate) {
+                LazyRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    items(tabGroups) { group ->
+                        val selected = group == selectedTabGroup
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(if (selected) palette.accent else palette.glassElevated)
+                                .clickableCompat(onClick = { onSelectTabGroup(group) })
+                                .padding(horizontal = 14.dp, vertical = 7.dp),
+                        ) {
+                            Text(
+                                text = group,
+                                color = if (selected) Color.White else palette.textPrimary,
+                                fontSize = 13.sp,
+                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                            )
+                        }
+                    }
+
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(palette.glassElevated)
+                                .clickableCompat(onClick = { showNewGroupDialog = true })
+                                .padding(horizontal = 12.dp, vertical = 7.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Lucide.Plus, contentDescription = "New Tab Group", tint = palette.accent, modifier = Modifier.size(14.dp))
+                                Text(
+                                    text = " Group",
+                                    color = palette.accent,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
 
             LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
                 modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 4.dp, bottom = 120.dp),
+                contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 8.dp, bottom = 120.dp),
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
