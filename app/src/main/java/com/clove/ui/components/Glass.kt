@@ -245,9 +245,9 @@ fun GlassSurface(
                 val h = size.height
 
                 if (w > 0f && h > 0f) {
-                    val cornerRadius = when (shape) {
-                        is CircleShape -> min(w, h) / 2f
-                        is CornerBasedShape -> shape.topStart.toPx(size, density).coerceAtMost(min(w, h) / 2f)
+                    val cornerRadius = when {
+                        shape == CircleShape -> min(w, h) / 2f
+                        shape is CornerBasedShape -> shape.topStart.toPx(size, density).coerceAtMost(min(w, h) / 2f)
                         else -> min(w, h) / 2f
                     }
                     val radii = floatArrayOf(cornerRadius, cornerRadius, cornerRadius, cornerRadius)
