@@ -228,7 +228,8 @@ private fun BarButton(
     onLongClick: (() -> Unit)? = null,
 ) {
     val palette = LocalSafariPalette.current
+    val contentColor = if (enabled) palette.textPrimary else palette.textSecondary.copy(alpha = 0.35f)
     GlassCircleButton(onClick = onClick, size = 46.dp, enabled = enabled, onLongClick = onLongClick) {
-        Icon(icon, contentDescription = label, tint = palette.textPrimary, modifier = Modifier.size(22.dp))
+        Icon(icon, contentDescription = label, tint = contentColor, modifier = Modifier.size(22.dp))
     }
 }

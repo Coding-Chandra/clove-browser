@@ -49,11 +49,9 @@ import com.clove.ui.components.AddressEditor
 import com.clove.ui.components.BrowserToolbar
 import com.clove.ui.components.DistractionBanner
 import com.clove.ui.components.FindOnPageBar
-import com.clove.ui.components.LocalGlassBackdrop
 import com.clove.ui.components.MoreMenu
 import com.clove.ui.components.PageFormatMenu
 import com.clove.ui.components.ReaderView
-import com.clove.ui.components.rememberGlassBackdrop
 import com.clove.ui.screens.DownloadsSheet
 import com.clove.ui.screens.LibrarySheet
 import com.clove.ui.screens.LibraryTab
@@ -78,9 +76,6 @@ fun BrowserScreen(viewModel: BrowserViewModel) {
     var showPageFormat by remember { mutableStateOf(false) }
     var editingAddress by remember { mutableStateOf(false) }
 
-    // ---- live frosted-glass backdrop (real blur over the WebView) ----
-    val (glassBackdropState, captureBackdrop) = rememberGlassBackdrop()
-
     // ---- scroll driven collapse ----
     val collapsed = remember { mutableStateOf(false) }
     val onScroll = remember {
@@ -91,7 +86,6 @@ fun BrowserScreen(viewModel: BrowserViewModel) {
                 dy < -6 -> false
                 else -> collapsed.value
             }
-            captureBackdrop() // throttled internally; keeps the blur fresh while scrolling
         }
     }
     val collapseFraction by animateFloatAsState(
@@ -106,14 +100,6 @@ fun BrowserScreen(viewModel: BrowserViewModel) {
     androidx.compose.runtime.LaunchedEffect(tabIds) {
         val stale = webViews.keys.filter { it !in tabIds }
         stale.forEach { id -> webViews.remove(id)?.destroy() }
-    }
-
-    // Refresh the frosted backdrop shortly after loads / navigation / chrome reappearing.
-    LaunchedEffect(tab?.id, tab?.isLoading, tab?.url, overlay, editingAddress) {
-        if (overlay == Overlay.NONE && !editingAddress) {
-            kotlinx.coroutines.delay(160)
-            captureBackdrop()
-        }
     }
 
     fun activeWebView(): WebView? = viewModel.currentTabId?.let { webViews[it] }
@@ -147,12 +133,11 @@ fun BrowserScreen(viewModel: BrowserViewModel) {
         }
     }
 
-    CompositionLocalProvider(LocalGlassBackdrop provides glassBackdropState) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(palette.pageBackground),
-        ) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(palette.pageBackground),
+    ) {
             // ---------- Page content (safe distance from status bar, edge-to-edge background) ----------
             Box(modifier = Modifier.fillMaxSize()) {
                 if (tab != null && tab.hasContent) {
@@ -451,5 +436,4 @@ fun BrowserScreen(viewModel: BrowserViewModel) {
             onDismiss = { overlay = Overlay.NONE },
         )
     }
-}
 }
