@@ -35,3 +35,19 @@ fun clickableCompat(
         onLongClick = onLongClick,
     )
 }
+
+/** Extension variant for direct chaining: `Modifier.clickableCompat { ... }` */
+@OptIn(ExperimentalFoundationApi::class)
+fun Modifier.clickableCompat(
+    onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
+    enabled: Boolean = true,
+    interactionSource: MutableInteractionSource? = null,
+): Modifier = this.then(
+    clickableCompat(
+        onClick = onClick,
+        onLongClick = onLongClick,
+        enabled = enabled,
+        interactionSource = interactionSource,
+    )
+)
