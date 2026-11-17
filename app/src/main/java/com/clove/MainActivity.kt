@@ -20,16 +20,6 @@ import com.clove.ui.theme.LocalSafariPalette
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
-        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
-            try {
-                val crashLog = java.io.File(filesDir, "last_crash.txt")
-                crashLog.writeText(android.util.Log.getStackTraceString(throwable))
-            } catch (_: Exception) {}
-            defaultHandler?.uncaughtException(thread, throwable)
-        }
-
         enableEdgeToEdge()
         setContent {
             val vm: BrowserViewModel = viewModel()

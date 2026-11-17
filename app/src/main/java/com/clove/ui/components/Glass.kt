@@ -1,7 +1,5 @@
 package com.clove.ui.components
 
-import android.graphics.Paint
-import android.graphics.RuntimeShader
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -28,90 +26,21 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.clove.ui.theme.LocalSafariPalette
-import org.intellij.lang.annotations.Language
-import kotlin.math.PI
-
-// ============================================================================
-// AGSL Shaders inspired by Kyant0/AndroidLiquidGlass
-// ============================================================================
-
-@Language("AGSL")
-private const val RoundedRectSDF = """
-float radiusAt(float2 centeredCoord, float4 radii) {
-    if (centeredCoord.x >= 0.0) {
-        if (centeredCoord.y <= 0.0) return radii.y;
-        else return radii.z;
-    } else {
-        if (centeredCoord.y <= 0.0) return radii.x;
-        else return radii.w;
-    }
-}
-
-float sdRoundedRect(float2 coord, float2 halfSize, float radius) {
-    float2 cornerCoord = abs(coord) - (halfSize - float2(radius));
-    float outside = length(max(cornerCoord, 0.0)) - radius;
-    float inside = min(max(cornerCoord.x, cornerCoord.y), 0.0);
-    return outside + inside;
-}
-
-float2 gradSdRoundedRect(float2 coord, float2 halfSize, float radius) {
-    float2 cornerCoord = abs(coord) - (halfSize - float2(radius));
-    if (cornerCoord.x >= 0.0 || cornerCoord.y >= 0.0) {
-        float2 v = max(cornerCoord, 0.0);
-        float len = length(v);
-        return sign(coord) * (len > 0.0001 ? (v / len) : float2(0.7071, 0.7071));
-    } else {
-        float gradX = step(cornerCoord.y, cornerCoord.x);
-        return sign(coord) * float2(gradX, 1.0 - gradX);
-    }
-}
-"""
 
 /**
- * Kyant's physical 45° incident light highlight shader from AndroidLiquidGlass.
- * Calculates exact SDF normals and shines dynamic specular light highlights
- * on the curved rim of capsules and rounded rectangles with zero division-by-zero risk.
- */
-@Language("AGSL")
-private const val KyantHighlightShaderString = """
-uniform float2 size;
-uniform float4 cornerRadii;
-uniform float angle;
-uniform float falloff;
-uniform float alpha;
-
-$RoundedRectSDF
-
-half4 main(float2 coord) {
-    float2 halfSize = size * 0.5;
-    float2 centeredCoord = coord - halfSize;
-    float radius = radiusAt(centeredCoord, cornerRadii);
-    
-    float gradRadius = min(radius * 1.5, min(halfSize.x, halfSize.y));
-    float2 grad = gradSdRoundedRect(centeredCoord, halfSize, gradRadius);
-    float2 normal = float2(cos(angle), sin(angle));
-    float d = dot(grad, normal);
-    float intensity = pow(clamp(abs(d), 0.0001, 1.0), falloff);
-    return half4(1.0, 1.0, 1.0, alpha) * intensity;
-}
-"""
-
-/**
- * A true crystal "liquid glass" surface inspired by Kyant0/AndroidLiquidGlass:
- * - Rich translucent optical viscosity (milky frosted in light, obsidian smoky in dark)
- * - Inner refractive trough creating physical lens curvature
- * - 3D convex dome light glaze reflection
- * - Fresnel caustic ambient glow
- * - Continuous SDF physical specular rim highlight (Kyant's 45° incident light)
- * - 0.75dp inner glass bevel refraction bead
- * - Ambient drop shadow
+ * A true crystal "liquid glass" surface inspired by Kyant0/AndroidLiquidGlass & iOS 26 Safari:
+ * - Rich optical frosted viscosity (milky frosted in light, obsidian smoky in dark)
+ * - Inner refractive trough (2.4dp stroke) producing physical lens curvature & internal shadow
+ * - 3D convex dome light glaze reflection (overhead light reflection on lens curvature)
+ * - Fresnel caustic ambient glow on lower rim
+ * - Continuous 45° incident specular rim highlight (dual incident specular light)
+ * - 0.75dp inner crisp refraction bead
+ * - Soft floating ambient drop shadow
  */
 @Composable
 fun GlassSurface(
@@ -124,22 +53,14 @@ fun GlassSurface(
     val palette = LocalSafariPalette.current
     val density = LocalDensity.current
 
-    val highlightShader = remember {
-        try {
-            RuntimeShader(KyantHighlightShaderString)
-        } catch (_: Throwable) {
-            null
-        }
-    }
-
     Box(
         modifier = modifier
             .shadow(
                 elevation = elevation,
                 shape = shape,
                 clip = false,
-                ambientColor = Color.Black.copy(if (palette.isDark) 0.28f else 0.08f),
-                spotColor = Color.Black.copy(if (palette.isDark) 0.38f else 0.14f),
+                ambientColor = Color.Black.copy(if (palette.isDark) 0.35f else 0.10f),
+                spotColor = Color.Black.copy(if (palette.isDark) 0.45f else 0.16f),
             )
             .clip(shape)
             .drawBehind {
@@ -153,7 +74,6 @@ fun GlassSurface(
                     is CornerBasedShape -> shape.topStart.toPx(size, density).coerceAtMost(maxR)
                     else -> maxR
                 }
-                val radii = floatArrayOf(cornerRadius, cornerRadius, cornerRadius, cornerRadius)
                 val cRadius = CornerRadius(cornerRadius, cornerRadius)
 
                 // 1. LIQUID GLASS FROSTED BODY (Rich optical viscosity, never flat clear)
@@ -199,7 +119,7 @@ fun GlassSurface(
                     cornerRadius = cRadius,
                 )
 
-                // 5. 45° PHYSICAL SPECULAR RIM HIGHLIGHT
+                // 5. 45° PHYSICAL SPECULAR RIM HIGHLIGHT (Kyant incident light)
                 drawRoundRect(
                     brush = Brush.linearGradient(
                         colors = listOf(
@@ -215,28 +135,7 @@ fun GlassSurface(
                     cornerRadius = cRadius,
                 )
 
-                // 6. KYANT0 SDF 45° ACCENT HIGHLIGHT (if AGSL is supported)
-                if (highlightShader != null) {
-                    try {
-                        drawIntoCanvas { canvas ->
-                            val strokeWidthPx = with(density) { 1.35.dp.toPx() }
-                            highlightShader.setFloatUniform("size", w, h)
-                            highlightShader.setFloatUniform("cornerRadii", radii)
-                            highlightShader.setFloatUniform("angle", (45f * (PI / 180f)).toFloat())
-                            highlightShader.setFloatUniform("falloff", 1.0f)
-                            highlightShader.setFloatUniform("alpha", if (palette.isDark) 0.85f else 0.95f)
-
-                            val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                                style = Paint.Style.STROKE
-                                strokeWidth = strokeWidthPx
-                                shader = highlightShader
-                            }
-                            canvas.nativeCanvas.drawRoundRect(0f, 0f, w, h, cornerRadius, cornerRadius, strokePaint)
-                        }
-                    } catch (_: Throwable) {}
-                }
-
-                // 7. INNER CRISP REFRACTION BEVEL (0.75dp edge bead)
+                // 6. INNER CRISP REFRACTION BEVEL (0.75dp edge bead)
                 drawRoundRect(
                     color = Color.White.copy(alpha = if (palette.isDark) 0.22f else 0.35f),
                     style = Stroke(width = with(density) { 0.75.dp.toPx() }),
